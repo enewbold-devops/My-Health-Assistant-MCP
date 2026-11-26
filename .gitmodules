@@ -1,0 +1,3 @@
+[submodule "references/shared"]
+	path = references/shared
+	url = https://github.com/enewbold-devops/Codex-CoPilot-Agent-Skills.git
