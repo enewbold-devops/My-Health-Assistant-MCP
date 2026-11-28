@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyHealthfinder</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px/1.55 Inter, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 16px 20px; color: CanvasText; background: Canvas; }
+    main { max-width: 68ch; margin: 0 auto; overflow-wrap: anywhere; }
+    header img { display: block; width: 150px; height: auto; max-width: 85%; padding: 4px; background: white; border-radius: 3px; }
+    h1 { font-size: 1.45rem; line-height: 1.25; margin: .8rem 0 .4rem; }
+    h2 { font-size: 1.2rem; } h3, h4, h5, h6 { font-size: 1rem; }
+    p, ul, ol { margin: .65rem 0; } ul, ol { padding-inline-start: 1.4rem; }
+    a, button { color: LinkText; }
+    button { font: inherit; text-align: start; cursor: pointer; }
+    .topic { padding: .35rem 0; border: 0; text-decoration: underline; background: transparent; }
+    .action { padding: .4rem .75rem; border: 1px solid currentColor; border-radius: .4rem; background: transparent; }
+    button:focus-visible, a:focus-visible { outline: 2px solid Highlight; outline-offset: 3px; }
+    article { max-height: 55vh; min-height: 8rem; overflow: auto; scrollbar-gutter: stable; }
+    #message { margin: .5rem 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <header><a href="https://odphp.health.gov/myhealthfinder" target="_blank" rel="noopener noreferrer"><img alt="MyHealthfinder" src="https://odphp.health.gov/themes/custom/healthfinder/images/MyHF.svg"></a></header>
+    <p id="message" role="status">Loading MyHealthfinder…</p>
+    <div id="view"></div>
+  </main>
+  <script type="module">
+    const view = document.querySelector("#view");
+    const message = document.querySelector("#message");
+    const version = "2026-01-26";
+    let ready = false;
+    let parentOrigin = "*";
+    let capabilities = {};
+    let requestId = 1;
+    let pending = null;
+    let language = "en";
+
+    function post(fields) {
+      window.parent.postMessage({ jsonrpc: "2.0", ...fields }, parentOrigin);
+    }
+
+    function element(tag, text) {
+      const node = document.createElement(tag);
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function safeUrl(value) {
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" && url.origin === "https://odphp.health.gov"
+          && !url.username && !url.password ? url.href : null;
+      } catch { return null; }
+    }
+
+    function publisherLink(url, label) {
+      const href = safeUrl(url);
+      if (!href) return element("span", label);
+      const link = element("a", label);
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      return link;
+    }
+
+    const tags = new Set(["p", "ul", "ol", "li", "strong", "em", "b", "i", "br", "h2", "h3", "h4",
+      "h5", "h6", "blockquote", "sup", "sub", "table", "thead", "tbody", "tr", "td", "th", "caption"]);
+    function appendArticleNodes(parent, nodes) {
+      for (const item of nodes || []) {
+        if (typeof item === "string") {
+          parent.append(document.createTextNode(item));
+          continue;
+        }
+        if (!item || (!tags.has(item.tag) && item.tag !== "a")) continue;
+        const child = item.tag === "a" ? publisherLink(item.href, "") : element(item.tag);
+        appendArticleNodes(child, item.children);
+        parent.append(child);
+      }
+    }
+
+    function endRequest() {
+      if (pending) clearTimeout(pending.timer);
+      pending = null;
+      view.removeAttribute("aria-busy");
+    }
+
+    function failure() {
+      endRequest();
+      message.textContent = language === "es" ? "No se pudo cargar el resultado. Inténtalo de nuevo."
+        : "The result could not be loaded. Please try again.";
+    }
+
+    function toolButton(label, name, args, className) {
+      const button = element("button", label);
+      button.type = "button";
+      button.className = className;
+      button.addEventListener("click", () => {
+        if (!ready || pending) return;
+        const id = ++requestId;
+        pending = { id, timer: setTimeout(failure, 15000) };
+        view.setAttribute("aria-busy", "true");
+        message.textContent = language === "es" ? "Cargando…" : "Loading…";
+        post({ id, method: "tools/call", params: { name, arguments: args } });
+      });
+      return button;
+    }
+
+    function render(result, moveFocus = false) {
+      endRequest();
+      const data = result?.structuredContent;
+      if (result?.isError || !data) { failure(); return; }
+      language = data.language === "es" ? "es" : "en";
+      const es = language === "es";
+      document.documentElement.lang = language;
+      message.textContent = "";
+      view.replaceChildren();
+      if (Array.isArray(data.topics)) {
+        view.append(element("h1", es ? "Temas de salud" : "Health topics"));
+        view.append(element("p", es ? `Se muestran ${data.topics.length} de ${data.total} temas.`
+          : `Showing ${data.topics.length} of ${data.total} topics.`));
+        const list = element("ul");
+        for (const topic of data.topics) {
+          const li = element("li");
+          if (capabilities.serverTools) {
+            li.append(toolButton(topic.title, "get_health_topic", { topicId: topic.topicId, language }, "topic"));
+          } else {
+            li.textContent = topic.title + " · ID " + topic.topicId;
+          }
+          list.append(li);
+        }
+        view.append(list);
+        if (data.nextOffset != null) {
+          if (capabilities.serverTools) {
+            view.append(toolButton(es ? "Siguientes temas" : "Next topics", "list_health_topics",
+              { language, offset: data.nextOffset, limit: data.topics.length }, "action"));
+          } else {
+            view.append(element("p", es ? `Solicita la siguiente página en el chat con offset=${data.nextOffset}.`
+              : `Ask for the next page in chat using offset=${data.nextOffset}.`));
+          }
+        }
+      } else if (data.status === "found") {
+        view.append(element("h1", data.title));
+        const updated = element("p");
+        const date = element("time", new Intl.DateTimeFormat(language, { dateStyle: "long", timeZone: "UTC" })
+          .format(new Date(data.lastUpdated)));
+        date.dateTime = data.lastUpdated;
+        updated.append(es ? "Actualizado el " : "Updated ", date, " · ",
+          publisherLink(data.sourceUrl, es ? "Ver el artículo original" : "View original article"));
+        view.append(updated);
+        if (Array.isArray(result._meta?.article) && result._meta.article.length) {
+          const article = element("article");
+          article.tabIndex = 0;
+          article.setAttribute("aria-label", data.title);
+          for (const section of result._meta.article) {
+            if (section.title) article.append(element("h2", section.title));
+            appendArticleNodes(article, section.nodes);
+          }
+          view.append(article);
+        }
+      } else if (data.status === "not_found") {
+        view.append(element("h1", es ? "Tema no disponible en español" : "Topic unavailable in English"));
+        if (es) {
+          view.append(capabilities.serverTools
+            ? toolButton("Buscar la versión en inglés", "get_health_topic", { topicId: data.topicId, language: "en" }, "action")
+            : element("p", `Puedes solicitar en el chat el tema ${data.topicId} en inglés.`));
+        }
+      } else { failure(); return; }
+      const heading = view.querySelector("h1");
+      if (moveFocus && heading) { heading.tabIndex = -1; heading.focus(); }
+    }
+
+    window.addEventListener("message", event => {
+      const rpc = event.data;
+      if (event.source !== window.parent || !rpc || rpc.jsonrpc !== "2.0") return;
+      if (parentOrigin !== "*" && event.origin !== parentOrigin) return;
+      if (rpc.id === 1 && rpc.result?.protocolVersion === version && !ready) {
+        parentOrigin = event.origin && event.origin !== "null" ? event.origin : "*";
+        capabilities = rpc.result.hostCapabilities || {};
+        ready = true;
+        post({ method: "ui/notifications/initialized", params: {} });
+      } else if (ready && rpc.method === "ui/notifications/tool-result") {
+        render(rpc.params);
+      } else if (ready && rpc.method === "ui/notifications/tool-cancelled") {
+        failure();
+      } else if (pending && rpc.id === pending.id) {
+        if (rpc.error) failure();
+        else render(rpc.result, true);
+      } else if (rpc.id === 1 && rpc.error) {
+        failure();
+      }
+    });
+    document.addEventListener("click", event => {
+      const link = event.target.closest("a");
+      if (!link || !ready || !capabilities.openLinks) return;
+      const url = safeUrl(link.href);
+      if (!url) return;
+      event.preventDefault();
+      post({ id: ++requestId, method: "ui/open-link", params: { url } });
+    });
+    if (window.parent !== window) {
+      post({ id: 1, method: "ui/initialize", params: {
+        appInfo: { name: "MyHealthfinder", version: "1.0.0" }, appCapabilities: {}, protocolVersion: version
+      } });
+      new ResizeObserver(() => {
+        if (ready) post({ method: "ui/notifications/size-changed", params: { height: document.body.offsetHeight } });
+      }).observe(document.body);
+    }
+  </script>
+</body>
+</html>

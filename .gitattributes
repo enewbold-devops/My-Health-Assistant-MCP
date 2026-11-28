@@ -1,0 +1,2 @@
+# Preserve the reviewed registry's SHA-256 on Windows checkouts.
+solutions/myhealthfinder-mcp/data/myhealthfinder-topic-skill-registry.json text eol=lf
