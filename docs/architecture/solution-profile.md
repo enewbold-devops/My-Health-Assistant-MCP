@@ -1,6 +1,6 @@
 # MyHealthfinder MCP development readiness
 
-**November 28, 2026 — two-tool local prototype authorized.** The first milestone lets a consumer discover a public topic and open the official article in the requested language. The user selected a local Node origin on `develop` and will configure Cloudflare Tunnel and the ChatGPT development plugin manually. The milestone ends with an actual ChatGPT evaluation. Public Site hosting and use by other workspaces are later milestones. [Run and connect the prototype](../../README.md)
+**November 28, 2026 — two-tool development plugin tested in ChatGPT.** The owner connected the local Node origin on `develop` through Cloudflare Tunnel. ChatGPT opened a Spanish article and waited for an explicit choice before opening an English fallback. One title-attribution issue remains in the generated chat reply. Public Site hosting and use by other workspaces are later milestones. [Run and connect the prototype](../../README.md)
 
 ## Implemented tool contracts (v1.0.0)
 
@@ -20,7 +20,17 @@ The Node adapter creates a stateless SDK server for each exchange. The tool regi
 | Localized content | Both languages returned topic `527`. Spanish `30602` returned an empty result. Choosing English then opened the live shopping list, which has article text and an untitled section. |
 | Presentation | A Chrome iframe test exercised the MCP Apps handshake, catalog selection, Spanish detail, official link, date, linked logo and explicit English fallback with real tool results. Article text stays in component metadata. The canonical source offers the publisher's complete page, including off-origin references. |
 | Local controls | Offline tests cover invalid inputs with zero upstream calls, unknown tools, response mismatches, upstream failure, limits, and recovery. The Node listener binds to loopback. Its concurrency and rate caps apply to that process. The npm production dependency audit returned zero findings after removal of the unused UI scaffold library. |
-| Pending manual evaluation | The owner configures the Cloudflare route and installs the development plugin. Confirm the actual tool list, visible article and language behavior in ChatGPT using the [three test prompts](../../README.md#test-in-chatgpt). |
+
+## Cloudflare and installed ChatGPT plugin verification on November 28, 2026
+
+Tested commit `39e9921` through the configured HTTPS endpoint and the installed My Health Finder MCP plugin in the owner's ChatGPT workspace.
+
+| Check | Observed result |
+| --- | --- |
+| Discovery | The public endpoint returned exactly `list_health_topics` and `get_health_topic`. ChatGPT displayed the catalog widget and the topic-detail widget. |
+| Spanish article | An ordinary Spanish request for topic `527` opened the official article in ChatGPT. The widget displayed Spanish text, the linked MyHealthfinder attribution, the original article link and the publisher date of June 11, 2026. The public MCP result contained six sections. |
+| Missing translation | A request for topic `30602` in Spanish returned `not_found` and zero sections. The widget displayed “Tema no disponible en español” and a “Buscar la versión en inglés” button. ChatGPT offered English or another Spanish lookup and finished its reply. The English article appeared only after the tester selected the button. |
+| Transcript quality | The missing-result reply also supplied a Spanish rendering of the English title. The tool returned no title for the missing Spanish record. ChatGPT labeled it as translated, but did not identify who translated it. The widget correctly displayed the unavailable state. |
 
 ## What the discovery established
 
